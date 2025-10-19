@@ -1,65 +1,68 @@
-export 'package:manager/manager.dart';
-
-import 'package:chat_gpt/authentication/login_page.dart';
-import 'package:chat_gpt/chats/models.dart';
-import 'package:chat_gpt/home_page.dart';
+import 'package:chat_gpt/domain/apis/actions_repository.dart';
+import 'package:chat_gpt/domain/apis/authentication.dart';
+import 'package:chat_gpt/domain/apis/chats_repository.dart';
+import 'package:chat_gpt/domain/apis/configuration_repository.dart';
+import 'package:chat_gpt/main.dart';
+import 'package:chat_gpt/objectbox.g.dart';
+import 'package:chat_gpt/ui/login.dart';
+import 'package:chat_gpt/ui/home/home.dart';
+export 'package:chat_gpt/utils/service_locator.dart';
+export 'package:flutter/material.dart' hide State;
 import 'package:forui/forui.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path/path.dart' show join;
+import 'package:path_provider/path_provider.dart';
+export 'package:chat_gpt/utils/extensions.dart';
 
-import 'authentication/authentication_bloc.dart';
-import 'main.dart';
-
-export 'chat/chat_page.dart';
-export 'dart:io';
-export 'package:chat_gpt/chats/chats_bloc.dart';
-export 'package:chat_gpt/chats/left_chats_page.dart';
-export 'package:chat_gpt/details.dart';
-export 'package:flutter/foundation.dart';
-export 'package:flutter/material.dart';
-export 'package:freezed_annotation/freezed_annotation.dart';
-export 'package:path_provider/path_provider.dart';
-export 'package:states_rebuilder/states_rebuilder.dart';
-export 'package:uuid/uuid.dart';
-export 'settings/settings_manager.dart';
-export 'settings/themes.dart';
-export 'navigator.dart';
+import 'domain/apis/navigator.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await RM.storageInitializer(HiveStorage());
-  // await RM.deleteAllPersistState();
+
+  final appInfo = await PackageInfo.fromPlatform();
+  final path = await getApplicationDocumentsDirectory();
+  final store = await openStore(directory: join(path.path, appInfo.appName));
+
+  locator.service(store);
+  locator.repository(ConfigurationRepository());
+  locator.repository(AuthenticationRepository());
+  locator.repository(ChatsRepository());
+  locator.repository(MessagesRepository());
+  locator.repository(CurrentChatRepository());
+  locator.repository(HomeRepository());
+
   runApp(ChatGptApp());
 }
 
-class ChatGptApp extends UI {
+class ChatGptApp extends StatefulWidget {
+  const ChatGptApp({super.key});
+
+  @override
+  State<ChatGptApp> createState() => _ChatGptAppState();
+}
+
+class _ChatGptAppState extends State<ChatGptApp> {
+  late AuthenticationRepository authenticationRepository = watch();
+  late ConfigurationRepository configurationRepository = watch();
+
+  bool get dark => configurationRepository().dark;
+  bool get authenticated => authenticationRepository.authenticated;
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      navigatorKey: navigator.key,
+      navigatorKey: navigator.navigatorKey,
       debugShowCheckedModeBanner: false,
       builder: (_, child) {
         return FTheme(
-          data: switch (themeMode()) {
-            ThemeMode.light => FThemes.yellow.light,
-            _ => FThemes.yellow.dark,
+          data: switch (dark) {
+            false => FThemes.yellow.light,
+            true => FThemes.yellow.dark,
           },
           child: child!,
         );
       },
-      home: authenticationRM.isAuthenticated ? HomePage() : LoginPage(),
+      home: authenticated ? HomePage() : LoginPage(),
     );
   }
 }
-
-// global placeholder for current chat
-final chatRM = RM.inject<Chat?>(
-  () {
-    return chatsRM.get(idRM.state);
-  },
-  dependsOn: DependsOn({idRM}),
-);
-
-// global placeholder for current chat id
-final idRM = RM.inject<String>(() => '');
-
-String get version => '0.1';
-String get userName => 'Adnan Farooq';
